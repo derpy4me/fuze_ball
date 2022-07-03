@@ -1,16 +1,22 @@
-struct Button {
+struct Button
+{
   const int PIN;
   int numKeyPresses;
-  bool pressed;
+  bool lastState;
+  bool currentState;
+  bool lastFlicker;
+  int debounceTime;
 };
 
-int latchPin = 12;                  // Pin connected to ST_CP of 74HC595
-int clockPin = 13;                  // Pin connected to SH_CP of 74HC595
-int dataPin = 15;                   // Pin connected to DS of 74HC595
-Button greenButton = {4, 0, false}; // Pin connected to reset/start game button
-Button redButton = {0, 0, false};   // Pin connected to point undo button
-int homeBeam = 16;                  // Pin connected to home side break beam
-int awayBeam = 17;                  // Pin connected to away side break beam
+long DEBOUNCE_TIME = 50; // Debounce time in milliseconds
+
+int latchPin = 12;                                    // Pin connected to ST_CP of 74HC595
+int clockPin = 13;                                    // Pin connected to SH_CP of 74HC595
+int dataPin = 15;                                     // Pin connected to DS of 74HC595
+Button greenButton = {18, 0, false, false, false, 0}; // Pin connected to reset/start game button
+Button redButton = {5, 0, false, false, false, 0};    // Pin connected to point undo button
+int homeBeam = 16;                                    // Pin connected to home side break beam
+int awayBeam = 17;                                    // Pin connected to away side break beam
 
 // Define the encoding of characters 0-F of the common-anode 7-segment Display
 // 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, A, b, C, d, E, F
@@ -18,37 +24,63 @@ int awayBeam = 17;                  // Pin connected to away side break beam
 // byte num[] = {0xff, 0x7f, 0xbf, 0xdf, 0xef, 0xf7, 0xfb, 0xfd, 0xfe};
 byte num[] = {0xfe, 0xdf, 0xef, 0xf7, 0xfb, 0xfd};
 char inChar;
+void debounceCheck(Button button)
+{
+  if (button.currentState != button.lastFlicker)
+  {
+    button.debounceTime = millis();
+    button.lastFlicker = button.currentState;
+  }
 
-void IRAM_ATTR redButtonPressed() {
+  if ((millis() - button.debounceTime) > DEBOUNCE_TIME)
+  {
+    if (button.lastState && !button.currentState)
+    {
+      Serial.printf("Pin u% button pressed\n", button.PIN);
+      button.numKeyPresses += 1;
+    }
+    else if (!button.lastState && button.currentState)
+    {
+      Serial.printf("Pin u% button released\n", button.PIN);
+    }
+
+    button.lastState = button.currentState;
+  }
+}
+
+void IRAM_ATTR redButtonPressed()
+{
   // Interrupt for red button press
-  redButton.numKeyPresses += 1;
-  redButton.pressed = true;
+  debounceCheck(redButton);
 }
 
-void IRAM_ATTR greenButtonPressed() {
+void IRAM_ATTR greenButtonPressed()
+{
   // Interrupt for green button press
-  greenButton.numKeyPresses += 1;
-  greenButton.pressed = true;
+  debounceCheck(greenButton);
 }
 
-void setup() {
+void setup()
+{
   // Set output pins
   pinMode(latchPin, OUTPUT);
   pinMode(clockPin, OUTPUT);
   pinMode(dataPin, OUTPUT);
 
   // Set input pins
-  pinMode(redButton.PIN, INPUT);
-  attachInterrupt(redButton.PIN, redButtonPressed, FALLING);
-  pinMode(greenButton.PIN, INPUT);
-  attachInterrupt(greenButton.PIN, greenButtonPressed, FALLING);
+  pinMode(redButton.PIN, INPUT_PULLUP);
+  attachInterrupt(redButton.PIN, redButtonPressed, RISING);
+  pinMode(greenButton.PIN, INPUT_PULLUP);
+  attachInterrupt(greenButton.PIN, greenButtonPressed, RISING);
   pinMode(homeBeam, INPUT);
   pinMode(awayBeam, INPUT);
 
   Serial.begin(115200);
 }
 
-void loop() {
+void loop()
+{
+  // Serial.println("Loop is working");
   // Cycling display
   // for (int i = 0; i <= 0x05; i++) {
   //   // Output low level to latchPin
@@ -59,21 +91,22 @@ void loop() {
   //   digitalWrite(latchPin, HIGH);
   //   delay(500);
   // }
-  if (redButton.pressed) {
-    Serial.printf("Red Button has been pressed %u times\n", redButton.numKeyPresses);
-    redButton.pressed = false;
+
+  if (redButton.currentState) {
+    Serial.printf("Red Button pressed u% times\n", redButton.numKeyPresses);
   }
-  if (greenButton.pressed) {
-    Serial.printf("Green Button has been pressed %u times\n", greenButton.numKeyPresses);
-    greenButton.pressed = false;
+    if (greenButton.currentState) {
+    Serial.printf("Green Button pressed u% times\n", greenButton.numKeyPresses);
   }
 }
 
-void serialEvent() {
+void serialEvent()
+{
   // Serial Interrupt event
-  if (Serial.available()) {
-      inChar = Serial.read();
-      Serial.print("received: ");
-      Serial.println(inChar);
-    }
+  if (Serial.available())
+  {
+    inChar = Serial.read();
+    Serial.print("received: ");
+    Serial.println(inChar);
+  }
 }
