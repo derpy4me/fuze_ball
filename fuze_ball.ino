@@ -4,13 +4,13 @@ struct Button {
   bool pressed;
 };
 
-int latchPin = 12;          // Pin connected to ST_CP of 74HC595（Pin12）
-int clockPin = 13;          // Pin connected to SH_CP of 74HC595（Pin11）
-int dataPin = 15;           // Pin connected to DS of 74HC595（Pin14）
-Button redButton = {0, 0, false};
-Button greenButton = {4, 0, false};
-int homeBeam = 16;
-int awayBeam = 17;
+int latchPin = 12;                  // Pin connected to ST_CP of 74HC595
+int clockPin = 13;                  // Pin connected to SH_CP of 74HC595
+int dataPin = 15;                   // Pin connected to DS of 74HC595
+Button greenButton = {4, 0, false}; // Pin connected to reset/start game button
+Button redButton = {0, 0, false};   // Pin connected to point undo button
+int homeBeam = 16;                  // Pin connected to home side break beam
+int awayBeam = 17;                  // Pin connected to away side break beam
 
 // Define the encoding of characters 0-F of the common-anode 7-segment Display
 // 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, A, b, C, d, E, F
@@ -20,40 +20,45 @@ byte num[] = {0xfe, 0xdf, 0xef, 0xf7, 0xfb, 0xfd};
 char inChar;
 
 void IRAM_ATTR redButtonPressed() {
+  // Interrupt for red button press
   redButton.numKeyPresses += 1;
   redButton.pressed = true;
 }
 
 void IRAM_ATTR greenButtonPressed() {
+  // Interrupt for green button press
   greenButton.numKeyPresses += 1;
   greenButton.pressed = true;
 }
 
 void setup() {
-  // set pins to output
+  // Set output pins
   pinMode(latchPin, OUTPUT);
   pinMode(clockPin, OUTPUT);
   pinMode(dataPin, OUTPUT);
+
+  // Set input pins
   pinMode(redButton.PIN, INPUT);
   attachInterrupt(redButton.PIN, redButtonPressed, FALLING);
   pinMode(greenButton.PIN, INPUT);
   attachInterrupt(greenButton.PIN, greenButtonPressed, FALLING);
   pinMode(homeBeam, INPUT);
   pinMode(awayBeam, INPUT);
+
   Serial.begin(115200);
 }
 
 void loop() {
-  // Cycling display 0-F
-  for (int i = 0; i <= 0x05; i++) {
-    // Output low level to latchPin
-    digitalWrite(latchPin, LOW);
-    // Send serial data to 74HC595
-    shiftOut(dataPin, clockPin, MSBFIRST, num[i]);
-    // Output high level to latchPin, and 74HC595 will update the data to the parallel output port.
-    digitalWrite(latchPin, HIGH);
-    delay(500);
-  }
+  // Cycling display
+  // for (int i = 0; i <= 0x05; i++) {
+  //   // Output low level to latchPin
+  //   digitalWrite(latchPin, LOW);
+  //   // Send serial data to 74HC595
+  //   shiftOut(dataPin, clockPin, MSBFIRST, num[i]);
+  //   // Output high level to latchPin, and 74HC595 will update the data to the parallel output port.
+  //   digitalWrite(latchPin, HIGH);
+  //   delay(500);
+  // }
   if (redButton.pressed) {
     Serial.printf("Red Button has been pressed %u times\n", redButton.numKeyPresses);
     redButton.pressed = false;
@@ -65,6 +70,7 @@ void loop() {
 }
 
 void serialEvent() {
+  // Serial Interrupt event
   if (Serial.available()) {
       inChar = Serial.read();
       Serial.print("received: ");
