@@ -5,10 +5,10 @@ struct Button
   bool lastState;
   bool currentState;
   bool lastFlicker;
-  int debounceTime;
+  int lastPushTime;
 };
 
-long DEBOUNCE_TIME = 50; // Debounce time in milliseconds
+const int DEBOUNCE_TIME = 50; // Debounce time in milliseconds
 
 int latchPin = 12;                                    // Pin connected to ST_CP of 74HC595
 int clockPin = 13;                                    // Pin connected to SH_CP of 74HC595
@@ -23,25 +23,27 @@ int awayBeam = 17;                                    // Pin connected to away s
 // byte num[] = {0xc0, 0xf9, 0xa4, 0xb0, 0x99, 0x92, 0x82, 0xf8, 0x80, 0x90, 0x88, 0x83, 0xc6, 0xa1, 0x86, 0x8e, 0x00};
 // byte num[] = {0xff, 0x7f, 0xbf, 0xdf, 0xef, 0xf7, 0xfb, 0xfd, 0xfe};
 byte num[] = {0xfe, 0xdf, 0xef, 0xf7, 0xfb, 0xfd};
-char inChar;
+
 void debounceCheck(Button button)
 {
+  Serial.printf("Pin %u; Num Presses: %u; Current State: %u; Last State: %u; Last Flicker: %u;\n", button.PIN, button.numKeyPresses, button.currentState, button.lastState, button.lastFlicker);
+
   if (button.currentState != button.lastFlicker)
   {
-    button.debounceTime = millis();
+    button.lastPushTime = millis();
     button.lastFlicker = button.currentState;
   }
 
-  if ((millis() - button.debounceTime) > DEBOUNCE_TIME)
+  if ((millis() - button.lastPushTime) > DEBOUNCE_TIME)
   {
     if (button.lastState && !button.currentState)
     {
-      Serial.printf("Pin u% button pressed\n", button.PIN);
+      Serial.printf("Pin %u button pressed\n", button.PIN);
       button.numKeyPresses += 1;
     }
     else if (!button.lastState && button.currentState)
     {
-      Serial.printf("Pin u% button released\n", button.PIN);
+      Serial.printf("Pin %u button released\n", button.PIN);
     }
 
     button.lastState = button.currentState;
@@ -51,13 +53,13 @@ void debounceCheck(Button button)
 void IRAM_ATTR redButtonPressed()
 {
   // Interrupt for red button press
-  debounceCheck(redButton);
+  redButton.currentState = digitalRead(greenButton.PIN);
 }
 
 void IRAM_ATTR greenButtonPressed()
 {
   // Interrupt for green button press
-  debounceCheck(greenButton);
+  greenButton.currentState = digitalRead(greenButton.PIN);
 }
 
 void setup()
@@ -69,9 +71,9 @@ void setup()
 
   // Set input pins
   pinMode(redButton.PIN, INPUT_PULLUP);
-  attachInterrupt(redButton.PIN, redButtonPressed, RISING);
+  attachInterrupt(redButton.PIN, redButtonPressed, CHANGE);
   pinMode(greenButton.PIN, INPUT_PULLUP);
-  attachInterrupt(greenButton.PIN, greenButtonPressed, RISING);
+  attachInterrupt(greenButton.PIN, greenButtonPressed, CHANGE);
   pinMode(homeBeam, INPUT);
   pinMode(awayBeam, INPUT);
 
@@ -89,19 +91,22 @@ void loop()
   //   shiftOut(dataPin, clockPin, MSBFIRST, num[i]);
   //   // Output high level to latchPin, and 74HC595 will update the data to the parallel output port.
   //   digitalWrite(latchPin, HIGH);
-  //   delay(500);
+  // delay(500);
   // }
 
-  if (redButton.currentState) {
-    Serial.printf("Red Button pressed u% times\n", redButton.numKeyPresses);
+  if (redButton.currentState)
+  {
+    debounceCheck(redButton);
   }
-    if (greenButton.currentState) {
-    Serial.printf("Green Button pressed u% times\n", greenButton.numKeyPresses);
+  if (greenButton.currentState)
+  {
+    debounceCheck(greenButton);
   }
 }
 
 void serialEvent()
 {
+  char inChar;
   // Serial Interrupt event
   if (Serial.available())
   {
