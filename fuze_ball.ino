@@ -2,21 +2,20 @@ struct Button
 {
   const int PIN;
   int numKeyPresses;
-  bool lastState;
   bool currentState;
-  bool lastFlicker;
   int lastPushTime;
+  int timeGap;
 };
 
 const int DEBOUNCE_TIME = 50; // Debounce time in milliseconds
 
-int latchPin = 12;                                    // Pin connected to ST_CP of 74HC595
-int clockPin = 13;                                    // Pin connected to SH_CP of 74HC595
-int dataPin = 15;                                     // Pin connected to DS of 74HC595
-Button greenButton = {18, 0, false, false, false, 0}; // Pin connected to reset/start game button
-Button redButton = {5, 0, false, false, false, 0};    // Pin connected to point undo button
-int homeBeam = 16;                                    // Pin connected to home side break beam
-int awayBeam = 17;                                    // Pin connected to away side break beam
+int latchPin = 12;                         // Pin connected to ST_CP of 74HC595
+int clockPin = 13;                         // Pin connected to SH_CP of 74HC595
+int dataPin = 15;                          // Pin connected to DS of 74HC595
+Button greenButton = {18, 0, false, 0, 0}; // Pin connected to reset/start game button
+Button redButton = {5, 0, false, 0, 0};    // Pin connected to point undo button
+int homeBeam = 16;                         // Pin connected to home side break beam
+int awayBeam = 17;                         // Pin connected to away side break beam
 
 // Define the encoding of characters 0-F of the common-anode 7-segment Display
 // 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, A, b, C, d, E, F
@@ -26,40 +25,27 @@ byte num[] = {0xfe, 0xdf, 0xef, 0xf7, 0xfb, 0xfd};
 
 void debounceCheck(Button button)
 {
-  Serial.printf("Pin %u; Num Presses: %u; Current State: %u; Last State: %u; Last Flicker: %u;\n", button.PIN, button.numKeyPresses, button.currentState, button.lastState, button.lastFlicker);
+  int nowPush = millis();
+  button.timeGap = nowPush - button.lastPushTime;
 
-  if (button.currentState != button.lastFlicker)
+  if (button.timeGap > DEBOUNCE_TIME)
   {
-    button.lastPushTime = millis();
-    button.lastFlicker = button.currentState;
+    button.currentState = HIGH;
+    button.numKeyPresses += 1;
   }
-
-  if ((millis() - button.lastPushTime) > DEBOUNCE_TIME)
-  {
-    if (button.lastState && !button.currentState)
-    {
-      Serial.printf("Pin %u button pressed\n", button.PIN);
-      button.numKeyPresses += 1;
-    }
-    else if (!button.lastState && button.currentState)
-    {
-      Serial.printf("Pin %u button released\n", button.PIN);
-    }
-
-    button.lastState = button.currentState;
-  }
+  button.lastPushTime = nowPush;
 }
 
 void IRAM_ATTR redButtonPressed()
 {
   // Interrupt for red button press
-  redButton.currentState = digitalRead(greenButton.PIN);
+  debounceCheck(redButton);
 }
 
 void IRAM_ATTR greenButtonPressed()
 {
   // Interrupt for green button press
-  greenButton.currentState = digitalRead(greenButton.PIN);
+  debounceCheck(greenButton);
 }
 
 void setup()
@@ -71,9 +57,9 @@ void setup()
 
   // Set input pins
   pinMode(redButton.PIN, INPUT_PULLUP);
-  attachInterrupt(redButton.PIN, redButtonPressed, CHANGE);
+  attachInterrupt(redButton.PIN, redButtonPressed, RISING);
   pinMode(greenButton.PIN, INPUT_PULLUP);
-  attachInterrupt(greenButton.PIN, greenButtonPressed, CHANGE);
+  attachInterrupt(greenButton.PIN, greenButtonPressed, RISING);
   pinMode(homeBeam, INPUT);
   pinMode(awayBeam, INPUT);
 
@@ -94,14 +80,9 @@ void loop()
   // delay(500);
   // }
 
-  if (redButton.currentState)
-  {
-    debounceCheck(redButton);
-  }
-  if (greenButton.currentState)
-  {
-    debounceCheck(greenButton);
-  }
+  Serial.printf("Red button pressed %u times\n", redButton.numKeyPresses);
+  Serial.printf("Green button pressed %u times\n", greenButton.numKeyPresses);
+  delay(50);
 }
 
 void serialEvent()
